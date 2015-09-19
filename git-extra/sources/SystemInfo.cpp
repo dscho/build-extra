@@ -100,7 +100,7 @@ BOOL SystemInfoUtils::GetFsFileName( LPCTSTR lpDeviceFileName,
 				//Mapped network drive
 
 				char cDriveLetter;
-				DWORD dwParam;
+				int dwParam;
 
 				TCHAR lpSharedName[0x1000];
 
@@ -166,7 +166,7 @@ BOOL SystemInfoUtils::GetDeviceFileName( LPCTSTR lpFsFileName,
 			//Mapped network drive
 
 			char cDriveLetter;
-			DWORD dwParam;
+			int dwParam;
 
 			TCHAR lpSharedName[0x1000];
 
@@ -770,8 +770,6 @@ BOOL SystemHandleInformation::GetThreadId( HANDLE h, DWORD& threadID, DWORD proc
 //Process related functions
 BOOL SystemHandleInformation::GetProcessPath( HANDLE h, string& strPath, DWORD remoteProcessId )
 {
-	h; strPath; remoteProcessId;
-
 	stringstream number;
 	number << remoteProcessId;
 	strPath = number.str();
@@ -999,7 +997,7 @@ BOOL SystemModuleInformation::Refresh()
 	}
 
 	// Everey process or just a particular one
-	if ( m_processId != -1 )
+	if ( m_processId != (DWORD)-1 )
 		// For a particular one
 		GetModuleListForProcess( m_processId );
 	else
@@ -1067,7 +1065,7 @@ BOOL CALLBACK SystemWindowInformation::EnumerateWindows( HWND hwnd, LPARAM lPara
 	GetWindowThreadProcessId(hwnd, &wi.ProcessId ) ;
 
 	// Filtering by process ID
-	if ( _this->m_processId == -1 || _this->m_processId == wi.ProcessId )
+	if ( _this->m_processId == (DWORD)-1 || _this->m_processId == wi.ProcessId )
 	{
 		GetWindowText( hwnd, wi.Caption, MaxCaptionSize );
 
