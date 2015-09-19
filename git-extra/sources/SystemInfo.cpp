@@ -356,7 +356,7 @@ BOOL SystemThreadInformation::Refresh()
 		SystemHandleInformation::SYSTEM_HANDLE& h = *iter;
 
 		ti.ProcessId = h.ProcessID;
-		ti.ThreadHandle = (HANDLE)h.HandleNumber;
+		ti.ThreadHandle = (HANDLE)(intptr_t)h.HandleNumber;
 
 		// This is one of the threads we are lokking for
 		if ( SystemHandleInformation::GetThreadId( ti.ThreadHandle,
@@ -480,7 +480,7 @@ BOOL SystemHandleInformation::Refresh()
 			else
 			{
 				// Type filtering
-				GetTypeToken( (HANDLE)pSysHandleInformation
+				GetTypeToken( (HANDLE)(intptr_t)pSysHandleInformation
 						->Handles[i].HandleNumber,
 						strType,
 						pSysHandleInformation

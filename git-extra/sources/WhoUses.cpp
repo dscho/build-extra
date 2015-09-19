@@ -125,7 +125,7 @@ void WhoUsesFile( LPCTSTR lpFileName, BOOL bFullPathCheck )
 		if ( INtDll::dwNTMajorVersion == 4 && _tcsicmp( processName.c_str(), _T("services.exe" ) ) == 0 )
 			continue;
 
-		hi.GetName( (HANDLE)h.HandleNumber, name, (DWORD)h.ProcessID );
+		hi.GetName( (HANDLE)(intptr_t)h.HandleNumber, name, (DWORD)h.ProcessID );
 
 		if ( bFullPathCheck )
 			bShow =	_tcsicmp( name.c_str(), deviceFileName.c_str() ) == 0;
