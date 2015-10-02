@@ -185,6 +185,12 @@ add () { # <file>
 			mkdir -p "$dir"
 		fi
 		cp "$path" "$dir/"
+		if test -f "$path".sig
+		then
+			cp "$path".sig "$dir/"
+		else
+			gpg --detach-sign --use-agent --no-armor "$dir/$path"
+		fi
 	done
 }
 
@@ -208,7 +214,7 @@ update_local_package_databases () {
 	for arch in $architectures
 	do
 		(cd "$(arch_dir $arch)" &&
-		 repo-add --new git-for-windows.db.tar.xz *.pkg.tar.xz)
+		 repo-add --sign --new git-for-windows.db.tar.xz *.pkg.tar.xz)
 	done
 }
 
