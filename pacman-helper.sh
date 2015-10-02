@@ -37,7 +37,7 @@ export CURL_CA_BUNDLE
 
 mode=
 case "$1" in
-fetch|add|remove|push|files|dirs|orphans)
+fetch|add|remove|push|files|dirs|orphans|upload|publish)
 	mode="$1"
 	shift
 	;;
