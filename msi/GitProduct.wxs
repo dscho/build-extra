@@ -46,6 +46,9 @@
           <Directory Id='BinFolder' Name='bin' />
         </Directory>
       </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="StartMenu" Name="Git"/>
+      </Directory>
     </Directory>
   </Fragment>
 

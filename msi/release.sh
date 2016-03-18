@@ -68,7 +68,10 @@ sed -e 's/\(.*\)\\\(.*\)/            <Component Directory="INSTALLFOLDER:\\\1\\"
             <\/Component>/' \
 	    -e 's/^\([^\\]*\)$/            <Component Directory="INSTALLFOLDER">\
                 <File Source="&" KeyPath="yes" \/>\
-            <\/Component>/'
+            <\/Component>/' \
+	    -e 's/\(<File Source="git-bash.exe"[^>]*\) \/>/\1 Id="git_bash.exe"><Shortcut Id="GitBash" Name="Git Bash" Icon="git.ico" Directory="StartMenu" Advertise="yes" \/><\/File>/' \
+	    -e 's/\(<File Source="git-cmd.exe"[^>]*\) \/>/\1 Id="git_cmd.exe"><Shortcut Id="GitCMD" Name="Git CMD" Icon="git.ico" Directory="StartMenu" Advertise="yes" \/><\/File>/' \
+	    -e 's/\(<File Source="cmd\\git-gui.exe"[^>]*\) \/>/\1 Id="git_gui.exe" KeyPath="yes"><Shortcut Id="GitGUI" Name="Git GUI" Icon="git.ico" Directory="StartMenu" Advertise="yes" \/><\/File>/'
 
 cat <<EOF
         </ComponentGroup>
