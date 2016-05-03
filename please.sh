@@ -764,6 +764,29 @@ sign_files () {
 	fi
 }
 
+# sign_in_sdk <sdk-path> <arch> <bitness>
+sign_in_sdk () {
+	binaries="$(cd "$1"/usr/src/build-extra &&
+	 "$1"/git-cmd.exe --command=usr\\bin\\sh.exe -l -c \
+		"ARCH=$2 BITNESS=$3 ./make-file-list.sh" |
+	 grep "\\.\\(exe\\|dll\\)$")" ||
+	die "Could not retrieve list of .exe and .dll files in %s\n" "$1"
+
+	(cd "$1"/usr/src/build-extra &&
+	 for path in $binaries
+	 do
+		grep -q -b "SHA-256 Time Stamping Signer" "$1/$path" ||
+		git signtool "$1/$path" ||
+		die "Could not sign %s\n" "$1/$path"
+	 done)
+}
+
+sign_binaries () { #
+	sign_in_sdk "$sdk64" x86_64 64 &&
+	sign_in_sdk "$sdk32" i686 32 ||
+	die "Could not sign binaries\n"
+}
+
 release () { #
 	up_to_date usr/src/build-extra ||
 	die "build-extra is not up-to-date\n"
