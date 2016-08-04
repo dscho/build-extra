@@ -72,6 +72,13 @@ init)
 	 git commit -s -m "Pacman package index") ||
 	die "Could not conclude initial commits"
 	;;
+commit)
+	(cd "$root" &&
+	 git add -A . &&
+	 git diff-index --cached HEAD ||
+	 git commit -s -m "Update $(date +%Y%m%d-%H%M%S)") ||
+	die "Could not commit changes"
+	;;
 *)
 	die "Unknown command: $1"
 	;;
