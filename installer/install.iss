@@ -105,7 +105,7 @@ Filename: {app}\ReleaseNotes.html; Description: View Release Notes; Flags: shell
 Source: {#SourcePath}\ReleaseNotes.html; DestDir: {app}; Flags: replacesameversion; AfterInstall: DeleteFromVirtualStore
 Source: {#SourcePath}\..\LICENSE.txt; DestDir: {app}; Flags: replacesameversion; AfterInstall: DeleteFromVirtualStore
 Source: {#SourcePath}\NOTICE.txt; DestDir: {app}; Flags: replacesameversion; AfterInstall: DeleteFromVirtualStore; Check: ParamIsSet('VSNOTICE')
-Source: {#SourcePath}\..\edit-git-bash.dll; Flags: dontcopy
+Source: {#SourcePath}\..\edit-git-bash.exe; Flags: dontcopy
 
 [Dirs]
 Name: "{app}\tmp"
@@ -258,7 +258,9 @@ external 'CreateHardLinkA@Kernel32.dll stdcall delayload setuponly';
 #endif
 
 function EditGitBash(ExePath:WideString;Resource:WideString):Integer;
-external 'edit_git_bash@files:edit-git-bash.dll stdcall delayload setuponly';
+begin
+    Exec(ExpandConstant('{tmp}\edit-git-bash.exe'),AddQuotes(ExePath)+' '+AddQuotes(Resource),'',SW_HIDE,ewWaitUntilTerminated,Result);
+end;
 
 function OverrideGitBashCommandLine(GitBashPath:String;CommandLine:String):Integer;
 var
