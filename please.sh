@@ -2366,6 +2366,82 @@ upgrade () { # <package>
 		url=https://github.com/$repo/releases/tag/v$version &&
 		relnotes_feature='Comes with [Git LFS v'$version']('"$url"').'
 		;;
+	msys2-runtime)
+		(cd "$sdk64/usr/src/MSYS2-packages/msys2-runtime" &&
+		 if test ! -d src/msys2-runtime
+		 then
+			MSYSTEM=msys PATH="$sdk64/usr/bin:$PATH" \
+			"$sdk64"/git-cmd.exe --command=usr\\bin\\sh.exe -l -c \
+				'makepkg-mingw --nobuild'
+		 fi ||
+		 die "Could not initialize worktree for '%s\n" "$package"
+
+		 cd src/msys2-runtime ||
+		 die "Invalid worktree for '%s'\n" "$package"
+
+		 require_remote cygwin \
+			git://sourceware.org/git/newlib-cygwin.git &&
+		 git fetch --tags cygwin &&
+		 require_remote git-for-windows \
+			https://github.com/git-for-windows/msys2-runtime ||
+		 die "Could not connect remotes for '%s'\n" "$package"
+
+		 tag=$(git for-each-ref --sort=-taggerdate --count=1 \
+			--format='%(refname)' refs/tags/cygwin-\*-release) &&
+		 test -n "$tag" ||
+		 die "Could not determine latest tag of '%s'\n" "$package"
+
+		 version="$(echo "$tag" | sed -ne 'y/_/./' -e \
+		    's|^refs/tags/cygwin-\([1-9][.0-9]*\)-release$|\1|p')" &&
+		 test -n "$version" ||
+		 die "Invalid version '%s' for '%s'\n" "$version" "$package"
+
+		 # rebase if necessary
+		 if test 0 -lt $(git rev-list --count \
+			git-for-windows/master..$tag)
+		 then
+			require_push_url git-for-windows &&
+			git reset --hard &&
+			git checkout git-for-windows/master &&
+			GIT_EDITOR=true \
+			"$sdk64"/usr/src/build-extra/shears.sh \
+				--merging --onto "$tag" merging-rebase &&
+			git push git-for-windows HEAD:master ||
+			die "Could not rebase '%s' to '%s'\n" "$package" "$tag"
+		 fi
+
+		 msys2_runtime_mtime=$(git log -1 --format=%at \
+		 	git-for-windows/master --) &&
+		 msys2_package_mtime=$(git -C ../.. log -1 --format=%at -- .) &&
+		 test $msys2_runtime_mtime -gt $msys2_package_mtime ||
+		 die "Package '%s' already up-to-date\n\t%s: %s\n\t%s: %s\n" \
+			"$package" \
+			"Most recent source code update" \
+			"$(date --date="@$msys2_runtime_mtime")" \
+			"Most recent package update" \
+			"$(date --date="@$msys2_package_mtime")"
+
+		 git reset --hard &&
+		 git checkout git-for-windows/master &&
+		 cd ../.. &&
+		 if test "$version" = "$(sed -n 's/^pkgver=//p' <PKGBUILD)"
+		 then
+			pkgrel=$(($(sed -n 's/^pkgrel=//p' <PKGBUILD)+1)) &&
+			sed -i "s/^\\(pkgrel=\\).*/\\1$pkgrel/" PKGBUILD
+		 else
+			sed -i -e "s/^\\(pkgver=\\).*/\\1$version/" \
+				-e "s/^\\(pkgrel=\\).*/\\11/" PKGBUILD
+		 fi &&
+		 git commit -s -m "$package: update to v$version" PKGBUILD &&
+		 MSYSTEM=msys PATH="$sdk64/usr/bin:$PATH" \
+		 "$sdk64"/git-cmd.exe --command=usr\\bin\\sh.exe -l -c \
+			./update-patches.sh &&
+		 git commit --amend -C HEAD ||
+		 die "Could not update PKGBUILD of '%s' to version %s\n" \
+			"$package" "$version" &&
+		 git -C "$sdk32/$pkgpath" pull "$sdk64/$pkgpath/.." master
+		) || exit
+		;;
 	*)
 		die "Unhandled package: %s\n" "$package"
 		;;
