@@ -12,11 +12,15 @@ die () {
 	exit 1
 }
 
+SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)"
 output_directory="$HOME"
 while case "$1" in
 --output=*)
 	output_directory="$(cd "${1#*=}" && pwd)" ||
 	die "Directory inaccessible: '${1#*=}'"
+	;;
+--busybox)
+	export MINIMAL_GIT_WITH_BUSYBOX="$SCRIPT_PATH/root"
 	;;
 -*) die "Unknown option: %s\n" "$1";;
 *) break;;
@@ -39,7 +43,6 @@ esac
 VERSION=$1
 shift
 TARGET="$output_directory"/MinGit-"$VERSION"-"$BITNESS"-bit.zip
-SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)"
 
 case "$SCRIPT_PATH" in
 *" "*)
