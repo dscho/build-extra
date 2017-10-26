@@ -109,7 +109,7 @@ else
 fi
 
 printf '; List of files\n%s\n%s\n%s\n%s\n%s\n%s\n' \
-	"Source: \"mingw$BITNESS\\bin\\blocked-file-util.exe; Flags: dontcopy" \
+	"Source: \"mingw$BITNESS\\bin\\blocked-file-util.exe\"; Flags: dontcopy" \
 	"Source: \"{#SourcePath}\\package-versions.txt\"; DestDir: {app}\\etc; Flags: replacesameversion; AfterInstall: DeleteFromVirtualStore" \
 	"Source: \"{#SourcePath}\\..\\ReleaseNotes.css\"; DestDir: {app}\\usr\\share\\git; Flags: replacesameversion; AfterInstall: DeleteFromVirtualStore" \
 	"Source: \"cmd\\git.exe\"; DestDir: {app}\\bin; Flags: replacesameversion; AfterInstall: DeleteFromVirtualStore" \
@@ -196,7 +196,7 @@ die "Could not make installer"
 if test -n "$test_installer"
 then
 	echo "Launching $TEMP/$version.exe"
-	exec "$TEMP/$version.exe"
+	exec "$TEMP/$version.exe" //SKIPIFINUSE=1 //LOG=/tmp/a1
 	exit
 fi
 

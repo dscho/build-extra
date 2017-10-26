@@ -65,7 +65,7 @@ DefaultGroupName={#APP_NAME}
 DisableProgramGroupPage=auto
 DisableReadyPage=yes
 InfoBeforeFile={#SourcePath}\..\gpl-2.0.rtf
-#ifdef OUTPUT_TO_TEMP
+#ifdef OUTPUT_TO_TEMPP
 PrivilegesRequired=lowest
 #else
 PrivilegesRequired=none
@@ -1502,11 +1502,36 @@ begin
 end;
 
 function ShouldSkipPage(PageID:Integer):Boolean;
+var
+    AppDir,Msg,LogPath:String;
+    Res:Longint;
 begin
     if (ProcessesPage<>NIL) and (PageID=ProcessesPage.ID) then begin
         // This page is only reached forward (by pressing "Next", never by pressing "Back").
+if ParamIsSet('SKIPIFINUSE') then MsgBox('SKIPIFINUSE',mbError,MB_OK);
+        if (ParamIsSet('SKIPIFINUSE') or ParamIsSet('VSNOTICE')) then begin
+            AppDir:=ExpandConstant('{app}\mingw64');
+            if DirExists(AppDir) then begin
+                if not FileExists(ExpandConstant('{tmp}\blocked-file-util.exe')) then
+                    ExtractTemporaryFile('blocked-file-util.exe');
+		LogPath:=ExpandConstant('{tmp}\blocking-pids.log');
+LogError('blocking-pids "'+AppDir+'" 2>"'+LogPath+'"');
+                //if not Exec(ExpandConstant('{sys}\cmd.exe'),'/C """'+ExpandConstant('{tmp}\blocked-file-util.exe')+'"" blocking-pids ""'+AppDir+'""" 2>"'+LogPath+'"','',SW_HIDE,ewWaitUntilTerminated,Res) or (Res<>0) then begin
+LogPath:='C:\Users\johasc\a1.log';
+                if not Exec(ExpandConstant('{sys}\cmd.exe'),'/C "'+ExpandConstant('{tmp}\blocked-file-util.exe')+'" blocking-pids C:\git-sdk-64 2>"'+LogPath+'"','',SW_HIDE,ewWaitUntilTerminated,Res) or (Res<>0) then begin
+LogError(IntToStr(Res));
+                    Msg:='Skipping installation because '+AppDir+' is still in use:'+#13+#10+ReadFileAsString(LogPath);
+                    if ParamIsSet('SKIPIFINUSE') or (ExpandConstant('{log}')='') then
+                        LogError(Msg)
+                    else
+                        Log(Msg);
+                    ExitEarlyWithSuccess();
+                end;
+MsgBox('checked',mbError,MB_OK);
+            end;
+        end;
+MsgBox('Not skipping!',mbError,MB_OK);
         RefreshProcessList(NIL);
-        Result:=(GetArrayLength(Processes)=0);
     end else begin
         Result:=False;
     end;
