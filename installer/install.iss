@@ -303,6 +303,7 @@ const
     // Git Editor options.
     GE_VIM            = 1;
     GE_Nano           = 2;
+    GE_NotepadPlusPlus = 3;
 
     // Git Path options.
     GP_BashOnly       = 1;
@@ -345,7 +346,9 @@ var
 
     // Wizard page and variables for the Editor options.
     EditorPage:TWizardPage;
-    RdbEditor:array[GE_VIM..GE_Nano] of TRadioButton;
+    RdbEditor:array[GE_VIM..GE_NotepadPlusPlus] of TRadioButton;
+
+    NotepadPlusPlusPath:String;
 
     // Wizard page and variables for the Path options.
     PathPage:TWizardPage;
@@ -377,6 +380,11 @@ var
     ExperimentalOptionsPage:TWizardPage;
     RdbExperimentalOptions:array[GP_BuiltinDifftool..GP_BuiltinDifftool] of TCheckBox;
 #endif
+
+    // Mapping controls to hyperlinks
+    HyperlinkSource:array of TObject;
+    HyperlinkTarget:array of String;
+    HyperlinkCount:Integer;
 
     // Wizard page and variables for the processes page.
     SessionHandle:DWORD;
@@ -753,11 +761,31 @@ begin
         Result:=0;
 end;
 
+procedure OpenHyperlink(Sender:TObject);
+var
+  i,ExitStatus:Integer;
+begin
+  for i:=0 to (HyperlinkCount-1) do begin
+      if (HyperlinkSource[i]=Sender) then begin
+          ShellExec('',HyperlinkTarget[i],'','',SW_SHOW,ewNoWait,ExitStatus);
+          exit;
+      end;
+  end;
+  LogError('Missing hyperlink!');
+end;
+
 procedure OpenNanoHomepage(Sender:TObject);
 var
   ExitStatus:Integer;
 begin
   ShellExec('','https://www.nano-editor.org/dist/v2.8/nano.html','','',SW_SHOW,ewNoWait,ExitStatus);
+end;
+
+procedure OpenNotepadPlusPlus(Sender:TObject);
+var
+  ExitStatus:Integer;
+begin
+  ShellExec('','https://notepad-plus-plus.org/','','',SW_SHOW,ewNoWait,ExitStatus);
 end;
 
 procedure OpenVIMHomepage(Sender:TObject);
@@ -820,10 +848,160 @@ begin
     DummyBitmap.Free();
 end;
 
+function CreatePage(var PrevPageID:Integer;const Caption,Description:String;var Top,Left:Integer):TWizardPage;
+begin
+    Result:=CreateCustomPage(PrevPageID,Caption,Description);
+    PrevPageID:=Result.ID;
+    Top:=4;
+    Left:=8;
+end;
+
+function CountOccurrences(Needle,Haystack:String):Integer;
+begin
+        Result:=StringChangeEx(Haystack,Needle,'',True);
+end;
+
+function SubString(S:String;Start,Count:Integer):String;
+begin
+    Result:=S;
+    if (Start>1) then
+        Delete(Result,1,Start-1);
+    if (Count>=0) then
+        SetLength(Result,Count);
+end;
+
+{
+    Find the position of the next of the three specified tokens (if any).
+    Returns 0 if none were found.
+}
+
+function Pos3(S,Token1,Token2,Token3:String;var ResultPos:Integer):String;
+var
+    i:Integer;
+begin
+    ResultPos:=Pos(Token1,S);
+    if (ResultPos>0) then
+        Result:=Token1;
+    i:=Pos(Token2,S);
+    if (i>0) and (i<ResultPos) then begin
+        ResultPos:=i;
+        Result:=Token2;
+    end;
+    i:=Pos(Token3,S);
+    if (i>0) and (i<ResultPos) then begin
+        ResultPos:=i;
+        Result:=Token3;
+    end;
+end;
+
+{
+    Description can contain pseudo tags <RED>...</RED> and <A HREF=...>...</A>
+    (which cannot be mixed). It is currently not allowed to have line breaks
+    (i.e. #13) in those tags.
+}
+
+function CreateRadioButton(Page:TWizardPage;const Caption,Description:String;var Top,Left:Integer):TRadioButton;
+var
+    RadioLabel,SubLabel:TLabel;
+    Untagged,RowPrefix,Link:String;
+    RowStart,RowCount,i:Integer;
+begin
+    Result:=TRadioButton.Create(Page);
+    Result.Caption:=Caption;
+    with Result do begin
+        Parent:=Page.Surface;
+        Left:=ScaleX(Top);
+        Top:=ScaleY(Left);
+        Width:=ScaleX(405);
+        Height:=ScaleY(17);
+        Font.Style:=[fsBold];
+        TabOrder:=0;
+    end;
+    Top:=Top+24;
+    Untagged:='';
+    RadioLabel:=TLabel.Create(Page);
+    RadioLabel.Top:=ScaleY(Top);
+    with RadioLabel do begin
+        Parent:=Page.Surface;
+        Caption:=Untagged;
+        Left:=ScaleX(Left+24);
+        Width:=ScaleX(405);
+        Height:=ScaleY(13);
+    end;
+    RowPrefix:='';
+    RowCount:=1;
+    while True do begin
+        case Pos3(Description,#13,'<RED>','<A HREF=',i) of
+            '': begin
+                Untagged:=Untagged+Description;
+                RadioLabel.Caption:=Untagged;
+                RadioLabel.Height:=ScaleY(13*RowCount);
+                Top:=Top+13+18;
+LogError('increased top (after label) to: '+IntToStr(Top)+'; row count: '+IntToStr(RowCount));
+                Exit;
+            end;
+            ''+#13: begin
+                Untagged:=Untagged+SubString(Description,1,i);
+                Description:=SubString(Description,i+1,-1);
+                RowPrefix:='';
+                Top:=Top+13;
+            end;
+            '<RED>': begin
+                Untagged:=Untagged+SubString(Description,1,i-1);
+                RowPrefix:=RowPrefix+SubString(Description,1,i-1);
+                Description:=SubString(Description,i+5,-1);
+                i:=Pos('</RED>',Description);
+                SubLabeL:=TLabel.Create(Page);
+                SubLabel.Top:=ScaleY(Top);
+                with SubLabel do begin
+                    Parent:=Page.Surface;
+                    Caption:=SubString(Description,1,i-1);
+                    Left:=GetTextWidth(RowPrefix,RadioLabel.Font)+ScaleX(Left+24);
+                    Width:=ScaleX(405);
+                    Height:=ScaleY(13);
+                    Font.Color:=clRed;
+                end;
+                Untagged:=Untagged+SubString(Description,1,i-1);
+                RowPrefix:=RowPrefix+SubString(Description,1,i-1);
+                Description:=SubString(Description,i+6,-1);
+            end;
+            '<A HREF=': begin
+                Untagged:=Untagged+SubString(Description,1,i-1);
+                RowPrefix:=RowPrefix+SubString(Description,1,i-1);
+		Description:=SubString(Description,i+8,-1);
+                i:=Pos('>',Description);
+                HyperlinkCount:=HyperlinkCount+1;
+		SetArrayLength(HyperlinkSource,HyperlinkCount);
+		SetArrayLength(HyperlinkTarget,HyperlinkCount);
+                HyperlinkTarget[HyperlinkCount-1]:=SubString(Description,1,i-1);
+                Description:=SubString(Description,i+1,-1);
+                i:=Pos('</A>',Description);
+                SubLabeL:=TLabel.Create(Page);
+                SubLabel.Top:=ScaleY(Top);
+                with SubLabel do begin
+                    Parent:=Page.Surface;
+                    Caption:=SubString(Description,1,i-1);
+                    Left:=GetTextWidth(RowPrefix,RadioLabel.Font)+ScaleX(Left+24);
+                    Width:=ScaleX(405);
+                    Height:=ScaleY(13);
+                    Font.Color:=clBlue;
+                    Font.Style:=[fsUnderline];
+                    Cursor:=crHand;
+                    OnClick:=@OpenHyperlink;
+                end;
+                HyperlinkSource[HyperlinkCount-1]:=SubLabel;
+                Untagged:=Untagged+SubString(Description,1,i-1);
+                RowPrefix:=RowPrefix+SubString(Description,1,i-1);
+                Description:=SubString(Description,i+4,-1);
+            end;
+        end;
+    end;
+end;
+
 procedure InitializeWizard;
 var
-    PrevPageID:Integer;
-    LblNano,LblNanoNew,LblNanoLink,lblVIM,lblVIMLink,lblExitVIMLink:TLabel;
+    PrevPageID,Top,Left:Integer;
+    LblNano,LblNanoNew,LblNanoLink,lblNotepadPlusPlus,lblNotepadPlusPlusLink,lblVIM,lblVIMLink,lblExitVIMLink:TLabel;
     LblGitBash,LblGitCmd,LblGitCmdTools,LblGitCmdToolsWarn:TLabel;
     LblOpenSSH,LblPlink:TLabel;
     LblCurlOpenSSL,LblCurlWinSSL:TLabel;
@@ -846,108 +1024,21 @@ begin
      * Create a custom page for configuring the default Git editor.
      *)
 
-    EditorPage:=CreateCustomPage(
+    EditorPage:=CreatePage(
         PrevPageID
     ,   'Choosing the default editor used by Git'
     ,   'Which editor would you like Git to use?'
+    , Top, Left
     );
-    PrevPageID:=EditorPage.ID;
 
     // 1st choice
-    RdbEditor[GE_Nano]:=TRadioButton.Create(EditorPage);
-    with RdbEditor[GE_Nano] do begin
-        Parent:=EditorPage.Surface;
-        Caption:='Use the Nano editor by default';
-        Left:=ScaleX(4);
-        Top:=ScaleY(8);
-        Width:=ScaleX(405);
-        Height:=ScaleY(17);
-        Font.Style:=[fsBold];
-        TabOrder:=0;
-    end;
-    LblNano:=TLabel.Create(EditorPage);
-    with LblNano do begin
-        Parent:=EditorPage.Surface;
-        Caption:=
-            '(NEW!) GNU nano is a small and friendly text editor running in the console'+#13+'window. This is the recommended option.';
-        Left:=ScaleX(28);
-        Top:=ScaleY(32);
-        Width:=ScaleX(405);
-        Height:=ScaleY(26);
-    end;
-    LblNanoNew:=TLabel.Create(EditorPage);
-    with LblNanoNew do begin
-        Parent:=EditorPage.Surface;
-        Caption:='(NEW!)';
-        Left:=ScaleX(28);
-        Top:=ScaleY(32);
-        Width:=ScaleX(405);
-        Height:=ScaleY(13);
-        Font.Color:=clRed;
-    end;
-    LblNanoLink:=TLabel.Create(EditorPage);
-    with LblNanoLink do begin
-        Parent:=EditorPage.Surface;
-        Caption:='GNU nano';
-        Left:=GetTextWidth('(NEW!) ',LblNano.Font)+ScaleX(28);
-        Top:=ScaleY(32);
-        Width:=ScaleX(405);
-        Height:=ScaleY(13);
-        Font.Color:=clBlue;
-        Font.Style:=[fsUnderline];
-        Cursor:=crHand;
-        OnClick:=@OpenNanoHomepage;
-    end;
+    RdbEditor[GE_Nano]:=CreateRadioButton(EditorPage,'Use the Nano editor by default','<RED>(NEW!)</RED> <A HREF=https://www.nano-editor.org/dist/v2.8/nano.html>GNU nano</A> is a small and friendly text editor running in the console'+#13+'window. This is the recommended option.',Top,Left);
 
     // 2nd choice
-    RdbEditor[GE_VIM]:=TRadioButton.Create(EditorPage);
-    with RdbEditor[GE_VIM] do begin
-        Parent:=EditorPage.Surface;
-        Caption:='Use Vim (the ubiquitous text editor) as Git'+#39+'s default editor';
-        Left:=ScaleX(4);
-        Top:=ScaleY(76);
-        Width:=ScaleX(405);
-        Height:=ScaleY(17);
-        Font.Style:=[fsBold];
-        TabOrder:=1;
-        Checked:=True;
-    end;
-    LblVIM:=TLabel.Create(EditorPage);
-    with LblVIM do begin
-        Parent:=EditorPage.Surface;
-        Caption:=
-            'The Vim editor, while powerful, can be hard to use. It is the default editor of'+#13+'Git for Windows only for historical reasons.';
-        Left:=ScaleX(28);
-        Top:=ScaleY(100);
-        Width:=ScaleX(405);
-        Height:=ScaleY(26);
-    end;
-    LblVIMLink:=TLabel.Create(EditorPage);
-    with LblVIMLink do begin
-        Parent:=EditorPage.Surface;
-        Caption:='Vim editor';
-        Left:=GetTextWidth('The ',LblVIM.Font)+ScaleX(28);
-        Top:=ScaleY(100);
-        Width:=ScaleX(405);
-        Height:=ScaleY(13);
-        Font.Color:=clBlue;
-        Font.Style:=[fsUnderline];
-        Cursor:=crHand;
-        OnClick:=@OpenVIMHomepage;
-    end;
-    LblExitVIMLink:=TLabel.Create(EditorPage);
-    with LblExitVIMLink do begin
-        Parent:=EditorPage.Surface;
-        Caption:='can be hard to use';
-        Left:=GetTextWidth('The Vim editor, while powerful, ',LblVIM.Font)+ScaleX(28);
-        Top:=ScaleY(100);
-        Width:=ScaleX(405);
-        Height:=ScaleY(13);
-        Font.Color:=clBlue;
-        Font.Style:=[fsUnderline];
-        Cursor:=crHand;
-        OnClick:=@OpenExitVIMPost;
-    end;
+    RdbEditor[GE_VIM]:=CreateRadioButton(EditorPage,'Use Vim (the ubiquitous text editor) as Git'+#39+'s default editor','The <A HREF=http://www.vim.org/>Vim editor</A>, while powerful, <A HREF=https://stackoverflow.blog/2017/05/23/stack-overflow-helping-one-million-developers-exit-vim/>can be hard to use</A>. It is the default editor of'+#13+'Git for Windows only for historical reasons.',Top,Left);
+
+    // 3rd choice
+    //     Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\notepad++.exe
 
     // Restore the setting chosen during a previous install.
     Data:=ReplayChoice('Editor Option','VIM');
@@ -2313,7 +2404,10 @@ begin
 
     if RdbEditor[GE_Nano].Checked then begin
         if not Exec(AppDir + '\{#MINGW_BITNESS}\bin\git.exe','config --system core.editor nano.exe','',SW_HIDE,ewWaitUntilTerminated, i) then
-            LogError('Could not set nano as core.editor in the gitconfig.');
+            LogError('Could not set GNU nano as core.editor in the gitconfig.');
+    end else if (RdbEditor[GE_NotepadPlusPlus].Checked) and (NotepadPlusPlusPath<>'') then begin
+        if not Exec(AppDir + '\{#MINGW_BITNESS}\bin\git.exe','config --system core.editor "'+#39+NotepadPlusPlusPath+#39+' -multiInst -notabbar -nosession -noPlugin"','',SW_HIDE,ewWaitUntilTerminated, i) then
+            LogError('Could not set Notepad++ as core.editor in the gitconfig.');
     end;
 
     {
