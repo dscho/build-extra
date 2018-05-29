@@ -2178,10 +2178,12 @@ submit_build_to_coverity () { # [--worktree=<dir>] <upstream-branch-or-tag>
 
 tag_git () { # [--force]
 	force=
+	use_branch=
 	while case "$1" in
 	-f|--force)
 		force=--force
 		;;
+	--use-branch=*) use_branch="${1#*=}";;
 	-*) die "Unknown option: %s\n" "$1";;
 	*) break;;
 	esac; do shift; done
@@ -2201,6 +2203,17 @@ tag_git () { # [--force]
 	 require_remote git-for-windows \
 		https://github.com/git-for-windows/git &&
 	 require_push_url git-for-windows) || exit
+
+	case "$use_branch" in
+	*@*)
+		git "$dir_option" fetch --tags \
+			"${use_branch#*@}" "${use_branch%%@*}" ||
+		die "Could not fetch '%s' from '%s'\n" \
+			"${use_branch%%@*}" "${use_branch#*@}"
+		use_branch=FETCH_HEAD
+		;;
+	esac
+	use_branch="${use_branch:-git-for-windows/master}"
 
 	nextver="$(sed -ne \
 		'1s/.* \(v[0-9][.0-9]*\)(\([0-9][0-9]*\)) .*/\1.windows.\2/p' \
@@ -2223,7 +2236,7 @@ tag_git () { # [--force]
 	 signopt= &&
 	 if git config user.signingkey >/dev/null; then signopt=-s; fi &&
 	 git tag -m "$tag_message" -a $signopt $force \
-		"$nextver" git-for-windows/master) ||
+		"$nextver" $use_branch) ||
 	die "Could not tag %s in %s\n" "$nextver" "$git_src_dir"
 
 	echo "Created tag $nextver" >&2
