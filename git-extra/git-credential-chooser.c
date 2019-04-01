@@ -4,9 +4,11 @@
 static HINSTANCE instance;
 static LPWSTR *helper_name, *helper_path, previously_selected_helper;
 static size_t helper_nr, selected_helper;
+static int persist;
 
 #define ID_ENTER   IDOK
 #define ID_ABORT   IDCANCEL
+#define ID_PERSIST 1001
 #define ID_USER    2000
 
 static LPWSTR parse_script_interpreter(LPWSTR path)
@@ -401,10 +403,18 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wParam,
 			}
 		}
 
+		CreateWindowW(L"Button", L"Make this choice permanent (via the Git config)",
+			      WS_VISIBLE | WS_CHILD | BS_CHECKBOX,
+			      2 * offset_x,
+			      4 * offset_y + line_height * helper_nr,
+			      width - 2 * offset_x,
+			      line_height + line_offset_y,
+			      hwnd, (HMENU) ID_PERSIST, NULL, NULL);
+
 		CreateWindowW(L"Button", L"Choose",
 			      WS_VISIBLE | WS_CHILD,
 			      width - 2 * (button_width + offset_x),
-			      5 * offset_y + line_height * helper_nr,
+			      5 * offset_y + line_height * (helper_nr + 1),
 			      button_width,
 			      line_height + line_offset_y,
 			      hwnd, (HMENU) ID_ENTER, NULL, NULL);
@@ -412,7 +422,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wParam,
 		CreateWindowW(L"Button", L"Cancel",
 			      WS_VISIBLE | WS_CHILD,
 			      width - (button_width + offset_x),
-			      5 * offset_y + line_height * helper_nr,
+			      5 * offset_y + line_height * (helper_nr + 1),
 			      button_width,
 			      line_height + line_offset_y,
 			      hwnd, (HMENU) ID_ABORT, NULL, NULL);
@@ -427,6 +437,9 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wParam,
 			SendMessage(hwnd, WM_CLOSE, 0, 0);
 		} else if (HIWORD(wParam) == BN_CLICKED && LOWORD(wParam) >= ID_USER) {
 			selected_helper = LOWORD(wParam) - ID_USER;
+		} else if (wParam == ID_PERSIST) {
+			persist = !IsDlgButtonChecked(hwnd, ID_PERSIST);
+			CheckDlgButton(hwnd, ID_PERSIST, persist ? BST_CHECKED : BST_UNCHECKED);
 		}
 		break;
 
