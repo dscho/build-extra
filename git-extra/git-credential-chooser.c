@@ -226,11 +226,19 @@ static int spawn_process(LPWSTR exe, LPWSTR cmdline,
 		       (data.buffer[data.len - 1] == '\r' || data.buffer[data.len - 1] == '\n'))
 			data.len--;
 
-		wcs_len = MultiByteToWideChar(CP_UTF8, 0, data.buffer, data.len,
-					      *capture_output, wcs_alloc);
+		SetLastError(ERROR_SUCCESS);
+		wcs_len = !data.len ? 0 :
+			MultiByteToWideChar(CP_UTF8, 0, data.buffer, data.len,
+					    *capture_output, wcs_alloc);
 		(*capture_output)[wcs_len] = L'\0';
-		if (!wcs_len) {
-			MessageBoxW(NULL, L"Could not convert output of `git config` to Unicode", L"Error", MB_OK);
+		if (!wcs_len && data.len) {
+			WCHAR err[65536];
+fwprintf(stderr, L"mbstowcs returned %d\n", GetLastError()); fflush(stderr);
+			swprintf(err, 65535,
+				 L"Could not convert output of `%s` to Unicode",
+				 cmdline);
+			err[65535] = L'\0';
+			MessageBoxW(NULL, err, L"Error", MB_OK);
 			res = -1;
 		}
 	}
@@ -265,6 +273,56 @@ static int write_config(void)
 	return spawn_process(find_exe(L"git.exe"), command_line, 0, 0, NULL);
 }
 
+static LPWSTR quote(LPWSTR string)
+{
+        LPWSTR result, p, q;
+        int needs_quotes = !*string;
+        size_t len = 0;
+
+        for (p = string; *p; p++, len++) {
+                if (*p == L'"')
+                        len++;
+                else if (wcschr(L" \t\r\n*?{'", *p))
+                        needs_quotes = 1;
+                else if (*p == L'\\') {
+			LPWSTR end = p;
+			while (end[1] == L'\\')
+				end++;
+			len += end - p;
+			if (end[1] == L'"')
+				len += end - p + 1;
+			p = end;
+                }
+        }
+
+        if (!needs_quotes && len == p - string)
+                return string;
+
+        q = result = malloc((len + 3) * sizeof(WCHAR));
+        *(q++) = L'"';
+	for (p = string; *p; p++) {
+                if (*p == L'"')
+                        *(q++) = L'\\';
+                else if (*p == L'\\') {
+			LPWSTR end = p;
+			while (end[1] == L'\\')
+				end++;
+			if (end != p) {
+				memcpy(q, p, (end - p) * sizeof(WCHAR));
+				q += end - p;
+			}
+			if (end[1] == L'"') {
+				memcpy(q, p, (end - p + 1) * sizeof(WCHAR));
+				q += end - p + 1;
+			}
+			p = end;
+                }
+                *(q++) = *p;
+        }
+        wcscpy(q, L"\"");
+        return result;
+}
+
 static int path_ends_with(LPWSTR bread, LPWSTR crumb)
 {
 	size_t len1 = wcslen(bread), len2 = wcslen(crumb);
@@ -282,7 +340,8 @@ static int discover_config_to_persist_to(void)
 	 * and use it if we can. We fall back to the user config if everything
 	 * else fails.
 	 */
-	LPWSTR git_exe = find_exe(L"git.exe"), output, tab;
+	LPWSTR git_exe = find_exe(L"git.exe"), output, tab, quoted;
+	size_t len;
 	HANDLE h;
 	WCHAR git_editor_backup[32768];
 	int git_editor_unset = 1, res;
@@ -304,12 +363,26 @@ static int discover_config_to_persist_to(void)
 			LPWSTR toplevel;
 			if (spawn_process(git_exe, L"git rev-parse --show-cdup",
 					  0, 0, &toplevel) == 0 && toplevel[0])
+{ fwprintf(stderr, L"toplevel: '%s'\n", toplevel); fflush(stderr); { int res2 =
 				_wchdir(toplevel);
+fwprintf(stderr, L"chdir returned %d\n", res2); fflush(stderr); }}
 			free(toplevel);
+{ int res2 = spawn_process(git_exe, L"git rev-parse --show-cdup", 0, 0, &toplevel); fwprintf(stderr, L"cdup: '%s' returned %d\n", toplevel, res2); fflush(stderr); }
 		}
-		memcpy(output + 1, L"-f '", 4 * sizeof(WCHAR));
-		memcpy(tab, L"'", 2 * sizeof(WCHAR));
-		persist_to_config_option = output + 1;
+		*tab = L'\0';
+		quoted = quote(output + 5);
+		if (quoted == output + 5)
+			quoted = wcsdup(quoted);
+		free(output);
+		len = 4 + wcslen(quoted);
+		persist_to_config_option = malloc(len * sizeof(WCHAR));
+		if (!persist_to_config_option) {
+			MessageBoxW(NULL, L"Out of memory!", L"Error", MB_OK);
+			exit(1);
+		}
+		swprintf(persist_to_config_option, len, L"-f %s", quoted);
+		free(quoted);
+fwprintf(stderr, L"option: %s\n", persist_to_config_option); fflush(stderr);
 		return 0;
 	}
 	free(output);
@@ -325,7 +398,7 @@ static int discover_config_to_persist_to(void)
 			    0, 0, &output);
 	SetEnvironmentVariableW(L"GIT_EDITOR", git_editor_unset ? NULL : git_editor_backup);
 	if (!res &&
-	    (h = CreateFile(output, GENERIC_WRITE, FILE_SHARE_WRITE, NULL,
+	    (h = CreateFileW(output, GENERIC_WRITE, FILE_SHARE_WRITE, NULL,
 	    		    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL))) {
 		CloseHandle(h);
 		persist_to_config_option = L"--system";
@@ -345,8 +418,10 @@ static int persist_choice(void)
 {
 	WCHAR command_line[65536];
 
-	swprintf(command_line, 65535, L"git config %s credential.helper '%s'",
-		 persist_to_config_option, helper_path[selected_helper]);
+	swprintf(command_line, 65535, L"git config %s credential.helper %s",
+		 persist_to_config_option,
+		 quote(selected_helper ? helper_path[selected_helper] : L""));
+fwprintf(stderr, L"cmdline: '%s'\n", command_line); fflush(stderr);
 	return spawn_process(find_exe(L"git.exe"), command_line, 0, 0, NULL);
 }
 
@@ -582,15 +657,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		if (selected_helper < 0 || selected_helper >= helper_nr)
 			aborted = 1;
 		else {
-			LPWSTR helper = helper_path[selected_helper];
-			LPWSTR exe = helper, cmdline = helper;
-			LPWSTR interpreter = parse_script_interpreter(helper);
+			LPWSTR helper, exe, cmdline, interpreter;
 
 			if (persist)
 				persist_choice();
 			else
 				write_config();
 
+			if (!selected_helper)
+				return 1; /* no helper */
+
+ 			cmdline = exe = helper = helper_path[selected_helper];
+			interpreter = parse_script_interpreter(helper);
 			if (interpreter) {
 				size_t len1 = wcslen(interpreter);
 				size_t alloc = len1 + wcslen(helper) + 2;
