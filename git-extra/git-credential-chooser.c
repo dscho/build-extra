@@ -5,6 +5,7 @@ static HINSTANCE instance;
 static LPWSTR *helper_name, *helper_path, previously_selected_helper;
 static size_t helper_nr, selected_helper;
 static int persist;
+static LPWSTR persist_to_config_option, persist_label;
 
 #define ID_ENTER   IDOK
 #define ID_ABORT   IDCANCEL
@@ -263,6 +264,79 @@ static int write_config(void)
 	return spawn_process(find_exe(L"git.exe"), command_line, 0, 0, NULL);
 }
 
+static int path_ends_with(LPWSTR bread, LPWSTR crumb)
+{
+	size_t len1 = wcslen(bread), len2 = wcslen(crumb);
+
+	return len1 >= len2 && !wcsicmp(bread + len1 - len2, crumb);
+}
+
+static int discover_config_to_persist_to(void)
+{
+	/*
+	 * If the chooser is configured as credential.helper, we use the same
+	 * config to persist the choice (by overriding that setting).
+	 *
+	 * Otherwise, we first test whether we can write to the system config,
+	 * and use it if we can. We fall back to the user config if everything
+	 * else fails.
+	 */
+	LPWSTR output, tab;
+	HANDLE h;
+	WCHAR git_editor_backup[32768];
+	int git_editor_unset = 1, res;
+
+	persist_label = L"Make this choice permanent (via the Git config)";
+	res = spawn_process(find_exe(L"git.exe"),
+			    L"git config --show-origin credential.helper",
+			    0, 0, &output);
+	if (!res && !wcsncmp(output, L"file:", 5) &&
+	    (tab = wcschr(output, L'\t')) &&
+	    (!wcscmp(tab + 1, L"chooser") ||
+	     path_ends_with(tab + 1, L"\\git-credential-chooser.exe"))) {
+		memcpy(output + 1, L"-f '", 4 * sizeof(WCHAR));
+		memcpy(tab, L"'", 2 * sizeof(WCHAR));
+		persist_to_config_option = output + 1;
+		return 0;
+	}
+	free(output);
+
+	/* Now figure out where the system config is */
+	SetLastError(ERROR_SUCCESS);
+	if (GetEnvironmentVariableW(L"GIT_EDITOR", git_editor_backup, 32768) ||
+	    GetLastError() == ERROR_SUCCESS)
+		git_editor_unset = 0;
+	SetEnvironmentVariableW(L"GIT_EDITOR", L"echo");
+	res = spawn_process(find_exe(L"git.exe"), L"git -c "
+			    "advice.waitingForEditor=0 config --system -e",
+			    0, 0, &output);
+	SetEnvironmentVariableW(L"GIT_EDITOR", git_editor_unset ? NULL : git_editor_backup);
+	if (!res &&
+	    (h = CreateFile(output, GENERIC_WRITE, FILE_SHARE_WRITE, NULL,
+	    		    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL))) {
+		CloseHandle(h);
+		persist_to_config_option = L"--system";
+		persist_label = L"Make this choice permanent (via the "
+			"system-wide Git config)";
+	} else {
+		persist_to_config_option = L"--global";
+		persist_label = L"Make this choice permanent (via the "
+			"user-wide Git config)";
+	}
+
+	free(output);
+	return 0;
+}
+
+static int persist_choice(void)
+{
+	WCHAR command_line[65536];
+
+	swprintf(command_line, 65535, L"git config %s credential.helper '%s'",
+		 persist_to_config_option, helper_path[selected_helper]);
+	return spawn_process(find_exe(L"git.exe"), command_line, 0, 0, NULL);
+}
+
 static int discover_helpers(void)
 {
 	WCHAR *pattern_suffix = L"\\git-credential-*";
@@ -315,14 +389,15 @@ out_of_memory:
 			if (len > 5 && !wcscmp(find_data.cFileName + len - 5, L".html"))
 				goto next_file; /* skip e.g. git-credential-manager.html */
 
-			if (helper_nr + 1 >= alloc) {
-				alloc += 16;
-				if (helper_nr + 1 >= alloc)
-					alloc = helper_nr + 16;
-				helper_name = realloc(helper_name, alloc * sizeof(*helper_name));
-				helper_path = realloc(helper_path, alloc * sizeof(*helper_path));
-				if (!helper_name || !helper_path)
-					goto out_of_memory;
+	if (helper_nr + 1 >= alloc)
+	{
+		alloc += 16;
+		if (helper_nr + 1 >= alloc)
+			alloc = helper_nr + 16;
+		helper_name = realloc(helper_name, alloc * sizeof(*helper_name));
+		helper_path = realloc(helper_path, alloc * sizeof(*helper_path));
+		if (!helper_name || !helper_path)
+			goto out_of_memory;
 			}
 
 			helper_path[helper_nr] = malloc((pattern_len + 1 + len + 1) * sizeof(WCHAR));
@@ -403,7 +478,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wParam,
 			}
 		}
 
-		CreateWindowW(L"Button", L"Make this choice permanent (via the Git config)",
+		CreateWindowW(L"Button", persist_label,
 			      WS_VISIBLE | WS_CHILD | BS_CHECKBOX,
 			      2 * offset_x,
 			      4 * offset_y + line_height * helper_nr,
@@ -468,6 +543,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		return 1;
 	}
 
+	if (discover_config_to_persist_to() < 0) {
+		MessageBoxW(NULL, L"Could not discover config source", L"Error", MB_OK);
+		return 1;
+	}
+
 	if (discover_helpers() < 0) {
 		MessageBoxW(NULL, L"Could not discover credential helpers", L"Error", MB_OK);
 		return 1;
@@ -493,7 +573,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			LPWSTR exe = helper, cmdline = helper;
 			LPWSTR interpreter = parse_script_interpreter(helper);
 
-			write_config();
+			if (persist)
+				persist_choice();
+			else
+				write_config();
+
 			if (interpreter) {
 				size_t len1 = wcslen(interpreter);
 				size_t alloc = len1 + wcslen(helper) + 2;
