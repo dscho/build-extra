@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <stdio.h>
+#include <wchar.h>
 
 static HINSTANCE instance;
 static LPWSTR *helper_name, *helper_path, previously_selected_helper;
@@ -281,19 +282,31 @@ static int discover_config_to_persist_to(void)
 	 * and use it if we can. We fall back to the user config if everything
 	 * else fails.
 	 */
-	LPWSTR output, tab;
+	LPWSTR git_exe = find_exe(L"git.exe"), output, tab;
 	HANDLE h;
 	WCHAR git_editor_backup[32768];
 	int git_editor_unset = 1, res;
 
 	persist_label = L"Make this choice permanent (via the Git config)";
-	res = spawn_process(find_exe(L"git.exe"),
+	res = spawn_process(git_exe,
 			    L"git config --show-origin credential.helper",
 			    0, 0, &output);
 	if (!res && !wcsncmp(output, L"file:", 5) &&
 	    (tab = wcschr(output, L'\t')) &&
 	    (!wcscmp(tab + 1, L"chooser") ||
 	     path_ends_with(tab + 1, L"\\git-credential-chooser.exe"))) {
+		/*
+		 * If it is relative, we might not be in the correct
+		 * directory... Make sure that we are!
+		 */
+		if (!(output[5] == L'/' || output[5] == L'\\' ||
+		      (iswalpha(output[5]) && output[6] == L':'))) {
+			LPWSTR toplevel;
+			if (spawn_process(git_exe, L"git rev-parse --show-cdup",
+					  0, 0, &toplevel) == 0 && toplevel[0])
+				_wchdir(toplevel);
+			free(toplevel);
+		}
 		memcpy(output + 1, L"-f '", 4 * sizeof(WCHAR));
 		memcpy(tab, L"'", 2 * sizeof(WCHAR));
 		persist_to_config_option = output + 1;
@@ -307,7 +320,7 @@ static int discover_config_to_persist_to(void)
 	    GetLastError() == ERROR_SUCCESS)
 		git_editor_unset = 0;
 	SetEnvironmentVariableW(L"GIT_EDITOR", L"echo");
-	res = spawn_process(find_exe(L"git.exe"), L"git -c "
+	res = spawn_process(git_exe, L"git -c "
 			    "advice.waitingForEditor=0 config --system -e",
 			    0, 0, &output);
 	SetEnvironmentVariableW(L"GIT_EDITOR", git_editor_unset ? NULL : git_editor_backup);
