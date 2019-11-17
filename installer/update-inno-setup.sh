@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Download the most recent Inno Setup version.
-installer="is-unicode.exe"
+installer="is.exe"
 url="http://www.jrsoftware.org/download.php/$installer"
 
 die () {
@@ -27,6 +27,6 @@ then
 else
 	# See http://www.mingw.org/wiki/Posix_path_conversion.
 	./$installer //verysilent //dir=InnoSetup \
-		//noicons //tasks= //portable=1
+		//noicons //tasks= //portable=1 //currentuser
 fi ||
 die "Could not install InnoSetup"
