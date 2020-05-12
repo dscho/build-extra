@@ -122,7 +122,7 @@ else
 		ETC_GITCONFIG="$etc_gitconfig" \
 		PACKAGE_VERSIONS_FILE=package-versions.txt \
 		INCLUDE_GIT_UPDATE=1 \
-		sh ../make-file-list.sh)" ||
+		sh ../make-file-list.sh $EXTRA_PACKAGES)" ||
 	die "Could not generate file list"
 fi
 
@@ -172,6 +172,13 @@ if test "$(GIT_CONFIG_NOSYSTEM=1 HOME=. git add --patch=123 2>&1)" != \
 	"$(git -c add.interactive.usebuiltin=1 add --patch=123 2>&1)"
 then
 	inno_defines="$inno_defines$LF#define WITH_EXPERIMENTAL_BUILTIN_ADD_I 1"
+fi
+
+EXTRA_PACKAGES=
+if true || test -f "/mingw$BITNESS/libexec/git-core/git-credential-manager-core.exe"
+then
+	inno_defines="$inno_defines$LF#define WITH_EXPERIMENTAL_GCM_CORE 1"
+	EXTRA_PACKAGES=mingw-w64-$ARCH-git-credential-manager-core
 fi
 
 GITCONFIG_PATH="$(echo "$LIST" | grep "^$etc_gitconfig\$")"

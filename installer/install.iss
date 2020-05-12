@@ -360,12 +360,17 @@ const
 #define HAVE_EXPERIMENTAL_OPTIONS 1
 #endif
 
+#ifdef WITH_EXPERIMENTAL_GCM_CORE
+#define HAVE_EXPERIMENTAL_OPTIONS 1
+#endif
+
 #ifdef HAVE_EXPERIMENTAL_OPTIONS
     // Experimental options
     GP_BuiltinDifftool = 1;
     GP_BuiltinRebase   = 2;
     GP_BuiltinStash    = 3;
     GP_BuiltinAddI     = 4;
+    GP_GCM_Core        = 5;
 #endif
 
 var
@@ -432,7 +437,7 @@ var
 #ifdef HAVE_EXPERIMENTAL_OPTIONS
     // Wizard page and variables for the experimental options.
     ExperimentalOptionsPage:TWizardPage;
-    RdbExperimentalOptions:array[GP_BuiltinDifftool..GP_BuiltinAddI] of TCheckBox;
+    RdbExperimentalOptions:array[GP_BuiltinDifftool..GP_GCM_Core] of TCheckBox;
 #endif
 
     // Mapping controls to hyperlinks
@@ -1094,13 +1099,6 @@ var
   ExitStatus:Integer;
 begin
   ShellExec('','https://stackoverflow.blog/2017/05/23/stack-overflow-helping-one-million-developers-exit-vim/','','',SW_SHOW,ewNoWait,ExitStatus);
-end;
-
-procedure OpenGCMHomepage(Sender:TObject);
-var
-  ExitStatus:Integer;
-begin
-  ShellExec('','https://github.com/Microsoft/Git-Credential-Manager-for-Windows','','',SW_SHOW,ewNoWait,ExitStatus);
 end;
 
 procedure OpenSymlinksWikiPage(Sender:TObject);
@@ -2017,7 +2015,7 @@ begin
     RdbExtraOptions[GP_FSCache].Checked:=ReplayChoice('Performance Tweaks FSCache','Enabled')<>'Disabled';
 
     // 2nd option
-    RdbExtraOptions[GP_GCM]:=CreateCheckBox(ExtraOptionsPage,'Enable Git Credential Manager','The <A HREF=https://github.com/Microsoft/Git-Credential-Manager-for-Windows>Git Credential Manager for Windows</A> provides secure Git credential storage'+#13+'for Windows, most notably multi-factor authentication support for Visual Studio'+#13+'Team Services and GitHub. (requires .NET framework v4.5.1 or later).',TabOrder,Top,Left);
+    RdbExtraOptions[GP_GCM]:=CreateCheckBox(ExtraOptionsPage,'Enable Git Credential Manager','The <A HREF=https://github.com/Microsoft/Git-Credential-Manager-for-Windows>Git Credential Manager for Windows</A> handles credentials e.g. for Azure'+#13+'DevOps and GitHub (requires .NET framework v4.5.1 or later).',TabOrder,Top,Left);
 
     // Restore the settings chosen during a previous install, if .NET 4.5.1
     // or later is available.
@@ -2081,6 +2079,14 @@ begin
 
     // Restore the settings chosen during a previous install
     RdbExperimentalOptions[GP_BuiltinAddI].Checked:=ReplayChoice('Enable Builtin Interactive Add','Auto')='Enabled';
+#endif
+
+#ifdef WITH_EXPERIMENTAL_GCM_CORE
+    // 4th option
+    RdbExperimentalOptions[GP_GCM_Core]:=CreateCheckBox(ExperimentalOptionsPage,'Use Git Credential Manager Core', 'Use the new, cross-platform version of the Git Credential Manager for Windows.'+#13+'This overrides the Git Credential Manager, if enabled.',TabOrder,Top,Left);
+
+    // Restore the settings chosen during a previous install
+    RdbExperimentalOptions[GP_GCM_Core].Checked:=ReplayChoice('Use Git Credential Manager Core','Auto')='Disabled';
 #endif
 
 #endif
@@ -2722,6 +2728,9 @@ begin
 
     if RdbExtraOptions[GP_GCM].checked then
         GitSystemConfigSet('credential.helper','manager');
+
+    if RdbExtraOptions[GP_GCM_Core].checked then
+        GitSystemConfigSet('credential.helper','manager-core');
 
     if RdbExtraOptions[GP_Symlinks].checked then
         Cmd:='true'

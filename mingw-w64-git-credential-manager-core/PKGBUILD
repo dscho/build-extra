@@ -1,0 +1,47 @@
+# Maintainer: Johannes Schindelin/Matthew J Cheetham
+
+_realname="git-credential-manager-core"
+pkgbase="mingw-w64-${_realname}"
+pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}")
+pkgver=2.0.124.60385
+pkgrel=1
+_realver=$pkgver
+_realtag=v${pkgver%.*}-beta
+pkgdesc="Credential Manager for Git"
+arch=('any')
+project_url="https://github.com/microsoft/Git-Credential-Manager-Core"
+zip_x64_url="${project_url}/releases/download/${_realtag}/gcmcore-win-x64-${_realver}.zip"
+#zip_x86_url="${project_url}/releases/download/${_realtag}/gcmcore-win-x86-${_realver}.zip"
+src_zip_url="${project_url}/archive/${_realtag}.zip"
+license=('MIT')
+groups=('VCS')
+
+#source=("${zip_x64_url}" "${zip_x86_url}" "$src_zip_url")
+source=("${zip_x64_url}" "$src_zip_url")
+noextract=("${zip_x86_url##*/}" "${zip_x64_url##*/}")
+
+sha256sums=('d74a277fabc5e7f8b794f835014bd298d56aac5b37c37661e1686d9b3f4bd7e5'
+            '5a5235983342577ee4d95990db29fab3e0abb6ee5a4b5c464430214d684a4855')
+
+package() {
+  prefix="$pkgdir/${MINGW_PREFIX}"
+  builddir=build-${MINGW_CHOST}
+
+  cd "$builddir"
+  case "$MINGW_CHOST" in
+  i686)
+    x=x86
+    #bsdtar xf "$srcdir"/"${zip_x86_url##*/}"
+    ;;
+  x86_64)
+    x=x64
+    bsdtar xf "$srcdir"/"${zip_x64_url##*/}"
+    ;;
+  esac
+
+  install -d -m755 "${prefix}"/libexec/git-core
+  install -m755 "$srcdir2"/*.{dll,exe,config} "${prefix}"/libexec/git-core
+  install -d -m755 "${prefix}"/doc/git-credential-manager-core
+  install -m644 "$srcdir2"/NOTICE \
+    "${prefix}"/doc/git-credential-manager-core
+}
