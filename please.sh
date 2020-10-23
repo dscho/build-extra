@@ -4291,6 +4291,7 @@ publish () { #
 }
 
 release_sdk () { # <version>
+	set -x
 	version="$1"
 	tag=git-sdk-"$version"
 
@@ -4318,6 +4319,7 @@ release_sdk () { # <version>
 }
 
 publish_sdk () { #
+	set -x
 	up_to_date /usr/src/build-extra ||
 	die "build-extra is not up-to-date\n"
 
