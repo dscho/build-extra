@@ -142,6 +142,10 @@ TITLE="$BITNESS-bit"
 # ARM64 Windows handling
 if test -n "$arm64_artifacts_directory"
 then
+set -x
+ls -l "$arm64_artifacts_directory"
+ls -l $arm64_artifacts_directory
+eval ls -l "$arm64_artifacts_directory"
 	echo "Including ARM64 artifacts from $arm64_artifacts_directory" &&
 	TARGET="$output_directory"/PortableGit-"$VERSION"-arm64.7z.exe &&
 	TITLE="ARM64" &&
