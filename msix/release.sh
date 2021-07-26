@@ -22,6 +22,9 @@ esac
 
 makeappx='/c/Program Files (x86)/Windows Kits/10/bin/10.0.19041.0/x64/makeappx.exe'
 publisher="CN=82A13EFD-FE37-4EFC-8BA4-1C3E9EFE5F23"
+publisher='C=DE, S=North Rhine-Westphalia, L=Köln, O=Johannes Schindelin, CN=Johannes Schindelin'
+publisher='CN=Johannes Schindelin, O=Johannes Schindelin, L=Köln, S=North Rhine-Westphalia, C=DE'
+publisher='CN=Johannes Schindelin'
 
 version="$(powershell -Command "Write-Host (Get-Item '$(cygpath -aw /cmd/git.exe)').VersionInfo.FileVersionRaw")"
 test -n "$version" || die "Could not figure out version of /cmd/git.exe"
@@ -66,7 +69,7 @@ $(
 </PackagingLayout>
 EOF
 
-cat >appxmanifest.xml <<EOF || die "Could not write appxmanifest.xml"
+iconv -f utf-8 -t utf-8 >appxmanifest.xml <<EOF || die "Could not write appxmanifest.xml"
 <?xml version="1.0" encoding="utf-8"?>
 
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -224,4 +227,5 @@ cat >appxmanifest.xml <<EOF || die "Could not write appxmanifest.xml"
 </Package>
 EOF
 
+set -x
 "$makeappx" build -o -f PackagingLayout.xml -op . -pv "$version" -bv "$version"
