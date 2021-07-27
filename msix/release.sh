@@ -22,9 +22,7 @@ esac
 
 makeappx='/c/Program Files (x86)/Windows Kits/10/bin/10.0.19041.0/x64/makeappx.exe'
 publisher="CN=82A13EFD-FE37-4EFC-8BA4-1C3E9EFE5F23"
-publisher='C=DE, S=North Rhine-Westphalia, L=Köln, O=Johannes Schindelin, CN=Johannes Schindelin'
 publisher='CN=Johannes Schindelin, O=Johannes Schindelin, L=Köln, S=North Rhine-Westphalia, C=DE'
-publisher='CN=Johannes Schindelin'
 
 version="$(powershell -Command "Write-Host (Get-Item '$(cygpath -aw /cmd/git.exe)').VersionInfo.FileVersionRaw")"
 test -n "$version" || die "Could not figure out version of /cmd/git.exe"
@@ -41,12 +39,14 @@ etc_gitconfig="${etc_gitconfig#/}" ||
 die "Could not determine the path of the system config"
 
 echo "Generating file list to be included in the installer ..."
-LIST="$(printf '%s\n' git-bash.exe cmd/git-gui.exe cmd/gitk.exe cmd/git.exe)" ||
 LIST="$(ARCH=$ARCH BITNESS=$BITNESS \
 	ETC_GITCONFIG="$etc_gitconfig" \
 	PACKAGE_VERSIONS_FILE=package-versions.txt \
 	sh ../make-file-list.sh)" ||
 die "Could not generate file list"
+
+root="$(cygpath -aw / | sed 's|\\|&&|g')"
+test -n "$root" || die "Could not determine MSYS2 pseudo root"
 
 cat >PackagingLayout.xml <<EOF || die "Could not write PackagingLayout.xml"
 <PackagingLayout xmlns="http://schemas.microsoft.com/appx/makeappx/2017">
@@ -55,10 +55,15 @@ cat >PackagingLayout.xml <<EOF || die "Could not write PackagingLayout.xml"
       <Files>
         <File DestinationPath="Git\\etc\\package-versions.txt" SourcePath="package-versions.txt" />
         <File DestinationPath="Git\\ReleaseNotes.html" SourcePath="..\\ReleaseNotes.html" />
+        <File DestinationPath="Git\\dev\\stdin" SourcePath="$root\\dev\\stdin" />
+        <File DestinationPath="Git\\dev\\stdout" SourcePath="$root\\dev\\stdout" />
+        <File DestinationPath="Git\\dev\\stderr" SourcePath="$root\\dev\\stderr" />
+        <File DestinationPath="Git\\dev\\mqueue" SourcePath="$root\\dev\\mqueue" />
+        <File DestinationPath="Git\\dev\\shm" SourcePath="$root\\dev\\shm" />
 $(
-	root="$(cygpath -aw / | sed 's|\\|&&|g')"
 	echo "$LIST" | sed -e 's|/|\\|g' \
 		-e '/\\WebView2Loader.dll$/d' \
+		-e '/etc\\post-install\\/d' \
 		-e 's|^\(.*\)$|        <File DestinationPath="Git\\\1" SourcePath="'"$root"'\\\1" />|' \
 )
         <File DestinationPath="Images\\*.png" SourcePath="Images\\*.png" />
