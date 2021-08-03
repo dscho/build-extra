@@ -48,6 +48,15 @@ die "Could not generate file list"
 root="$(cygpath -aw / | sed 's|\\|&&|g')"
 test -n "$root" || die "Could not determine MSYS2 pseudo root"
 
+fd=0
+for name in stdin stdout stderr
+do
+	test -h $name ||
+	MSYS=winsymlinks:lnk ln -s /proc/self/$fd $name ||
+	die "Could not generate $name symlink"
+	fd=$(($fd+1))
+done
+
 cat >PackagingLayout.xml <<EOF || die "Could not write PackagingLayout.xml"
 <PackagingLayout xmlns="http://schemas.microsoft.com/appx/makeappx/2017">
   <PackageFamily ID="Git-$version" FlatBundle="false" ManifestPath="appxmanifest.xml" ResourceManager="false">
@@ -55,15 +64,15 @@ cat >PackagingLayout.xml <<EOF || die "Could not write PackagingLayout.xml"
       <Files>
         <File DestinationPath="Git\\etc\\package-versions.txt" SourcePath="package-versions.txt" />
         <File DestinationPath="Git\\ReleaseNotes.html" SourcePath="..\\ReleaseNotes.html" />
-        <File DestinationPath="Git\\dev\\stdin" SourcePath="$root\\dev\\stdin" />
-        <File DestinationPath="Git\\dev\\stdout" SourcePath="$root\\dev\\stdout" />
-        <File DestinationPath="Git\\dev\\stderr" SourcePath="$root\\dev\\stderr" />
-        <File DestinationPath="Git\\dev\\mqueue" SourcePath="$root\\dev\\mqueue" />
-        <File DestinationPath="Git\\dev\\shm" SourcePath="$root\\dev\\shm" />
+        <File DestinationPath="Git\\dev\\stdin.lnk" SourcePath="stdin.lnk" />
+        <File DestinationPath="Git\\dev\\stdout.lnk" SourcePath="stdout.lnk" />
+        <File DestinationPath="Git\\dev\\stderr.lnk" SourcePath="stderr.lnk" />
+        <File DestinationPath="Git\\dev\\mqueue\\" SourcePath="$root\\dev\\mqueue\\" />
+        <File DestinationPath="Git\\dev\\shm\\" SourcePath="$root\\dev\\shm\\" />
 $(
 	echo "$LIST" | sed -e 's|/|\\|g' \
 		-e '/\\WebView2Loader.dll$/d' \
-		-e '/etc\\post-install\\/d' \
+    -e '/etc\\post-install\\/d' \
 		-e 's|^\(.*\)$|        <File DestinationPath="Git\\\1" SourcePath="'"$root"'\\\1" />|' \
 )
         <File DestinationPath="Images\\*.png" SourcePath="Images\\*.png" />
