@@ -24,8 +24,10 @@ jobs:
   build-packages:
     needs: determine-packages
     runs-on: windows-latest
-    matrix:
-      directory: ${{ fromJSON(needs.determine-packages.outputs.matrix) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: ${{ fromJSON(needs.determine-packages.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v2
       - uses: git-for-windows/setup-git-for-windows-sdk@v1
