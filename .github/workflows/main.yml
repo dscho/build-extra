@@ -133,23 +133,23 @@ jobs:
           cygpath -aw "$PWD/sdk-artifact/usr/bin/core_perl" >>$GITHUB_PATH &&
           cygpath -aw "$PWD/sdk-artifact/usr/bin" >>$GITHUB_PATH &&
           cygpath -aw "$PWD/sdk-artifact/mingw$BITNESS/bin" >>$GITHUB_PATH
-      - name: debug (CMD)
-        shell: cmd
-        run: echo %PATH%
-      - name: debug
-        shell: bash
-        run: |
-          set +e
-          set -x
-          cygpath -aw /
-          echo $PATH
-          ls -l sdk-artifact
-      - name: build installer
-        if: matrix.artifact == 'build-installers'
-        shell: bash
-        run: ./installer/release.sh --output=$PWD/installer-${{ matrix.architecture }} 0-test
-      - uses: actions/upload-artifact@v2
-        if: matrix.artifact == 'build-installers'
-        with:
-          name: installer-${{ matrix.architecture }}
-          path: installer-${{ matrix.architecture }}
+#      - name: debug (CMD)
+#        shell: cmd
+#        run: echo %PATH%
+#      - name: debug
+#        shell: bash
+#        run: |
+#          set +e
+#          set -x
+#          cygpath -aw /
+#          echo $PATH
+#          ls -l sdk-artifact
+#      - name: build installer
+#        if: matrix.artifact == 'build-installers'
+#        shell: bash
+#        run: ./installer/release.sh --output=$PWD/installer-${{ matrix.architecture }} 0-test
+#      - uses: actions/upload-artifact@v2
+#        if: matrix.artifact == 'build-installers'
+#        with:
+#          name: installer-${{ matrix.architecture }}
+#          path: installer-${{ matrix.architecture }}
