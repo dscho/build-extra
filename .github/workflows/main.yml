@@ -1,140 +1,18 @@
 name: PR build
 
-on: pull_request
+on: push
 
 env:
   GIT_CONFIG_PARAMETERS: "'checkout.workers=56'"
 
 jobs:
-  determine-packages:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - name: determine packages to build
-        id: set-matrix
-        shell: bash
-        run: |
-          define_matrix () {
-            comm -12 "$2" "$3" >"$4" &&
-            cat "$4" &&
-            sed -e 's/\/$//' -e 's/.*/"&", /' -e '$s/, $//' <"$4" >list.txt &&
-            echo "$1=[$(test ! -s list.txt && echo '""' || tr -d '\n' <list.txt)]" >>$GITHUB_OUTPUT
-          }
-
-          git diff ${{github.event.pull_request.base.sha}}... --name-only |
-            sed \
-              -e '/^make-file-list\.sh$/ainstaller/' \
-              -e '/^make-file-list\.sh$/aportable/' \
-              -e '/^make-file-list\.sh$/amingit/' \
-              -e 's|[^/]*$||' |
-            sort -u >touched.txt &&
-
-          git ls-files \*/PKGBUILD | sed 's|[^/]*$||' | sort >directories.txt &&
-          define_matrix matrix directories.txt touched.txt packages.txt &&
-
-          git ls-files \*/release.sh | sed 's|[^/]*$||' | sort >releaseable.txt &&
-          define_matrix artifacts releaseable.txt touched.txt artifacts.txt
-
-          test -z "$(git log -L :create_sdk_artifact:please.sh ${{github.event.pull_request.base.sha}}.. -- )" &&
-          test 200 -gt $(git diff --numstat ${{github.event.pull_request.base.sha}}.. -- please.sh | cut -f 2) &&
-          test -z "$(git diff ${{github.event.pull_request.base.sha}}.. -- make-file-list.sh)" ||
-          echo "test-sdk-artifacts=true" >>$GITHUB_OUTPUT
-
-          test -z "$(git diff ${{github.event.pull_request.base.sha}}.. -- check-for-missing-dlls.sh)" ||
-          echo "check-for-missing-dlls=true" >>$GITHUB_OUTPUT
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      artifacts: ${{ steps.set-matrix.outputs.artifacts }}
-      test-sdk-artifacts: ${{ steps.set-matrix.outputs.test-sdk-artifacts }}
-      check-for-missing-dlls: ${{ steps.set-matrix.outputs.check-for-missing-dlls }}
-  build-packages:
-    needs: determine-packages
-    runs-on: windows-latest
-    if: needs.determine-packages.outputs.matrix != '[""]'
-    strategy:
-      fail-fast: false
-      matrix:
-        directory: ${{ fromJSON(needs.determine-packages.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v3
-      - uses: git-for-windows/setup-git-for-windows-sdk@v1
-        with:
-          flavor: full
-      - name: build ${{ matrix.directory }}
-        shell: bash
-        run: |
-          top_dir=$PWD &&
-          cd "${{ matrix.directory }}" &&
-          MAKEFLAGS=-j8 makepkg-mingw -s --noconfirm &&
-          artifacts="$(basename "${{ matrix.directory }}")-artifacts" &&
-          mkdir -p "$top_dir/$artifacts" &&
-          mv *.tar.* "$top_dir/$artifacts"/ &&
-          echo "artifacts=$artifacts" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.artifacts }}
-          path: ${{ env.artifacts }}
-      - name: ensure that the Git worktree is still clean
-        shell: bash
-        run: |
-          cd "${{ matrix.directory }}" &&
-          if ! git update-index --ignore-submodules --refresh ||
-            ! git diff-files --ignore-submodules ||
-            ! git diff-index --cached --ignore-submodules HEAD
-          then
-            echo "::error::Uncommitted changes after build!" >&2
-            git diff
-            exit 1
-          fi
-  build-artifacts:
-    needs: determine-packages
-    runs-on: windows-latest
-    if: needs.determine-packages.outputs.artifacts != '[""]'
-    strategy:
-      fail-fast: false
-      matrix:
-        directory: ${{ fromJSON(needs.determine-packages.outputs.artifacts) }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: initialize bare SDK clone
-        shell: bash
-        run: |
-          git clone --bare --depth=1 --single-branch --branch=main --filter=blob:none \
-            https://github.com/git-for-windows/git-sdk-64 .sdk
-      - name: build build-installers-64 artifact
-        shell: bash
-        run: |
-          ./please.sh create-sdk-artifact \
-            --bitness=64 \
-            --sdk=.sdk \
-            --out=sdk-artifact \
-            build-installers &&
-          cygpath -aw "$PWD/sdk-artifact/usr/bin/core_perl" >>$GITHUB_PATH &&
-          cygpath -aw "$PWD/sdk-artifact/usr/bin" >>$GITHUB_PATH &&
-          cygpath -aw "$PWD/sdk-artifact/mingw64/bin" >>$GITHUB_PATH &&
-          echo "MSYSTEM=MINGW64" >>$GITHUB_ENV
-      - name: build ${{ matrix.directory }}/
-        shell: bash
-        run: |
-          artifacts="$(basename "${{ matrix.directory }}")-artifacts" &&
-          mkdir -p "$artifacts" &&
-          ./"${{ matrix.directory }}"/release.sh --output="$PWD/$artifacts/" 0-test &&
-          echo "artifacts=$artifacts" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.artifacts }}
-          path: ${{ env.artifacts }}
   sdk-artifacts:
-    needs: determine-packages
-    if: needs.determine-packages.outputs.test-sdk-artifacts == 'true'
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        artifact: ['minimal', 'makepkg-git', 'build-installers', 'full']
-        bitness: ['32', '64']
+        artifact: ['build-installers']
+        bitness: ['32']
         exclude:
           - artifact: minimal
             bitness: 32
@@ -172,6 +50,26 @@ jobs:
           cygpath -aw "$PWD/sdk-artifact/usr/bin" >>$GITHUB_PATH &&
           cygpath -aw "$PWD/sdk-artifact/mingw${{ matrix.bitness }}/bin" >>$GITHUB_PATH &&
           echo "MSYSTEM=MINGW${{ matrix.bitness }}" >>$GITHUB_ENV
+      - name: debug with tmate
+        shell: bash
+        run: |
+          # install tmate
+          pacman -Sy --noconfirm tmate openssh &&
+
+          # restrict SSH access via public key authentication
+          # this requires calling `ssh -i <private-key> [...]` later on
+          mkdir -p ~/.ssh &&
+          echo 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDSXs87cLXHuXPXjPTyb3HTDizuD07CytsUgjXazbkfzD7/EZF5g6cRWnc+gbqApQCzGSbLXxCd+AV/UxyS62v34kO/k5olz6DF6aMURbvFqrB9v0px86T0ScYjehUf5NYzGixIIghW3Pdxqi6s8BRuNuUjTGsNDzlMLA8N9pK1TOBZglsRlBUdtg7zeXBN/gkS7tf44eAw7gxMNfhrb1ackEveeu7PDUEvkoHSfMFITBgd8z4PonoxZjWrijoQXxXKuD1GtWrvfev1yc6hGnLlRK8HCnnq87eYUd5iUVO2yWNBhVkySJMp66UuHKne7uROXslIhUT98cgDU04T/ZpZ2qwQqpsl0ohDC8rqiLSeAFNZQZdjwVAXtH+FIQLT8fyHaU8HsHD4exMPUHSaKIRL0kBbPS8Wxj1qh/F3lNPPtIxEmlbpVN56xSUkFGqBJRET4FIH+UpDiQE7nsaD4rl3iys7Aj0B2gFMttOOvq8J/dFOMqX+NEyiMAHVsFT0SBnKZfk5J96kWOANbJa753QC/01G8wiMKTU6M87Ziv3mB/FqIu97+78TYhEzdAOr3V7NZp/ccx6LoD7zvcDkKCaWD9PxPX2hcv70fZ/WsZ6wrkVEmBHs3vJ7lM+caTR8ndjt9wC5ceRfI1s55wZ8AZ9PJ2PVxpm9ZYDsgsiQXIwAFQ==' >~/.ssh/authorized_keys &&
+          # Generate an SSH key (needed for tmate)
+          echo -e 'y\n' | ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa &&
+
+          # Start tmate session
+          export CHERE_INVOKING=1 &&
+          tmate -S /tmp/tmate.sock -a ~/.ssh/authorized_keys new-session -d &&
+          tmate -S /tmp/tmate.sock wait tmate-ready &&
+
+          # Print SSH invocation
+          tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
       - name: build installer
         if: matrix.artifact == 'build-installers'
         shell: bash
@@ -197,7 +95,7 @@ jobs:
             "${env:ProgramFiles(x86)}\Git\mingw32\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
           } else {
             "$env:ProgramFiles\Git\usr\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
-            "$env:ProgramFiles\Git\mingw${{env.ARCH_BITNESS}}\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
+            "$env:ProgramFiles\Git\mingw32\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
           }
       - name: validate
         if: matrix.artifact == 'build-installers'
@@ -218,37 +116,17 @@ jobs:
           # cannot test SSH keys in read-only mode, skip test for now
           sed -i 's|git@ssh.dev.azure.com:v3/git-for-windows/git/git|https://github.com/git/git|' $checklist &&
           sh -x $checklist
-  check-for-missing-dlls:
-    needs: determine-packages
-    if: needs.determine-packages.outputs.test-sdk-artifacts == 'true' || needs.determine-packages.outputs.check-for-missing-dlls == 'true'
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        bitness: ['32', '64']
-    steps:
-      - uses: actions/checkout@v3
-      - name: initialize bare SDK clone
-        shell: bash
+      - name: wait for tmate to be done
+        if: always()
+        shell: pwsh
         run: |
-          git clone --bare --depth=1 --single-branch --branch=main --filter=blob:none \
-            https://github.com/git-for-windows/git-sdk-${{ matrix.bitness }} .sdk
-      - name: build build-installers-${{ matrix.bitness }} artifact
-        shell: bash
-        run: |
-          INCLUDE_OBJDUMP=t \
-          ./please.sh create-sdk-artifact \
-            --bitness=${{ matrix.bitness }} \
-            --sdk=.sdk \
-            --out=sdk-artifact \
-            build-installers &&
-          cygpath -aw "$PWD/sdk-artifact/usr/bin/core_perl" >>$GITHUB_PATH &&
-          cygpath -aw "$PWD/sdk-artifact/usr/bin" >>$GITHUB_PATH &&
-          cygpath -aw "$PWD/sdk-artifact/mingw${{ matrix.bitness }}/bin" >>$GITHUB_PATH &&
-          echo "MSYSTEM=MINGW${{ matrix.bitness }}" >>$GITHUB_ENV
-      - name: check for missing DLLs
-        shell: bash
-        run: ./check-for-missing-dlls.sh
-      - name: check for missing DLLs (MinGit)
-        shell: bash
-        run: MINIMAL_GIT=1 ./check-for-missing-dlls.sh
+          $env:MSYSTEM = "MINGW32"
+          & sdk-artifact\usr\bin\bash.exe -lc @"
+            while test -e /tmp/tmate.sock
+            do
+              msg=\"$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')\"
+              echo \"$msg\"
+              case \"$msg\" in \"no server running\") exit 0;; esac
+              sleep 5
+            done
+          "@
